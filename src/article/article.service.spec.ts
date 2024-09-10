@@ -3,7 +3,7 @@ import { ArticleService } from './article.service';
 import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Article } from './entities/article.entity';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import Helpers from '../utils/helpers';
 
 describe('ArticleService', () => {
@@ -129,9 +129,18 @@ describe('ArticleService', () => {
     it('should apply MoreThanOrEqual for start_date', async () => {
       const startDate = '2024-09-09T00:00:00.000Z';
 
+      const mockQueryBuilder: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
       jest
-        .spyOn(articleRepository, 'findAndCount')
-        .mockResolvedValueOnce([[], 0]);
+        .spyOn(articleRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder);
 
       await service.findAll({
         start_date: startDate,
@@ -140,22 +149,27 @@ describe('ArticleService', () => {
         user_id: 1,
       });
 
-      expect(articleRepository.findAndCount).toHaveBeenCalledWith({
-        where: {
-          created_at: MoreThanOrEqual(startDate),
-          user_id: 1,
-        },
-        skip: 0,
-        take: 10,
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith({
+        created_at: MoreThanOrEqual(startDate),
+        user_id: 1,
       });
     });
 
     it('should apply LessThanOrEqual for end_date', async () => {
       const endDate = '2024-09-09T00:00:00.000Z';
 
+      const mockQueryBuilder: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
       jest
-        .spyOn(articleRepository, 'findAndCount')
-        .mockResolvedValueOnce([[], 0]);
+        .spyOn(articleRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder);
 
       await service.findAll({
         end_date: endDate,
@@ -164,13 +178,9 @@ describe('ArticleService', () => {
         user_id: 1,
       });
 
-      expect(articleRepository.findAndCount).toHaveBeenCalledWith({
-        where: {
-          created_at: LessThanOrEqual(endDate),
-          user_id: 1,
-        },
-        skip: 0,
-        take: 10,
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith({
+        created_at: LessThanOrEqual(endDate),
+        user_id: 1,
       });
     });
 
@@ -178,9 +188,18 @@ describe('ArticleService', () => {
       const startDate = '2024-09-01T00:00:00.000Z';
       const endDate = '2024-09-09T00:00:00.000Z';
 
+      const mockQueryBuilder: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+
       jest
-        .spyOn(articleRepository, 'findAndCount')
-        .mockResolvedValueOnce([[], 0]);
+        .spyOn(articleRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder);
 
       await service.findAll({
         start_date: startDate,
@@ -190,13 +209,9 @@ describe('ArticleService', () => {
         user_id: 1,
       });
 
-      expect(articleRepository.findAndCount).toHaveBeenCalledWith({
-        where: {
-          created_at: Between(startDate, endDate),
-          user_id: 1,
-        },
-        skip: 0,
-        take: 10,
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith({
+        created_at: Between(startDate, endDate),
+        user_id: 1,
       });
     });
   });
@@ -234,41 +249,125 @@ describe('ArticleService', () => {
   });
 
   describe('update', () => {
+    it('should throw BadRequestException if article to update is not found', async () => {
+      const updateArticleDto = {
+        title: 'Updated Title',
+        description: 'Updated Description',
+      };
+      const user_id = 1;
+
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue(null);
+
+      await expect(
+        service.update(mockArticle.id, updateArticleDto, user_id),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw UnauthorizedException if user is not authorized to update the article', async () => {
+      const updateArticleDto = {
+        title: 'Updated Title',
+        description: 'Updated Description',
+      };
+      const unauthorizedUserId = 999;
+
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue({
+        ...mockArticle,
+        user_id: 2, // Different user ID
+      });
+
+      await expect(
+        service.update(mockArticle.id, updateArticleDto, unauthorizedUserId),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
     it('should update an article and return the updated article', async () => {
       const updateArticleDto = {
         title: 'Updated Title',
         description: 'Updated Description',
       };
+      const user_id = 1;
       const updatedArticle = { ...mockArticle, ...updateArticleDto };
 
-      jest.spyOn(articleRepository, 'update').mockResolvedValue({} as any);
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue(mockArticle);
+      jest
+        .spyOn(articleRepository, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
       jest.spyOn(service, 'findOne').mockResolvedValue(updatedArticle);
 
-      const result = await service.update(1, updateArticleDto);
-      expect(result).toEqual(updatedArticle);
-      expect(articleRepository.update).toHaveBeenCalledWith(
-        1,
+      const result = await service.update(
+        mockArticle.id,
         updateArticleDto,
+        user_id,
       );
+      expect(result).toEqual(updatedArticle);
+    });
+
+    it('should return the article if no update data is provided', async () => {
+      const updateArticleDto = {};
+      const user_id = 1;
+
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue(mockArticle);
+
+      const result = await service.update(
+        mockArticle.id,
+        updateArticleDto,
+        user_id,
+      );
+      expect(result).toEqual(mockArticle);
     });
   });
 
   describe('remove', () => {
-    it('should delete an article by id', async () => {
-      const deleteResult = { affected: 1 } as any;
-      jest.spyOn(articleRepository, 'delete').mockResolvedValue(deleteResult);
+    it('should remove an article by id', async () => {
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue(mockArticle);
+      jest
+        .spyOn(articleRepository, 'delete')
+        .mockResolvedValue({ affected: 1 } as any);
 
-      const result = await service.remove(1);
-      expect(result).toEqual(deleteResult);
-      expect(articleRepository.delete).toHaveBeenCalledWith(1);
+      const result = await service.remove(mockArticle.id, mockArticle.user_id);
+      expect(result).toBe(true);
+      expect(articleRepository.delete).toHaveBeenCalledWith(mockArticle.id);
     });
 
-    it('should return 0 affected rows if article not found', async () => {
-      const deleteResult = { affected: 0 } as any;
-      jest.spyOn(articleRepository, 'delete').mockResolvedValue(deleteResult);
+    it('should throw BadRequestException if article to remove is not found', async () => {
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue(null);
 
-      const result = await service.remove(999);
-      expect(result).toEqual(deleteResult);
+      await expect(
+        service.remove(mockArticle.id, mockArticle.user_id),
+      ).rejects.toThrow(BadRequestException);
+
+      try {
+        await service.remove(mockArticle.id, mockArticle.user_id);
+      } catch (e) {
+        expect(e.message).toBe('Article not found');
+      }
+    });
+
+    it('should throw UnauthorizedException if user is not authorized to delete the article', async () => {
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue({
+        ...mockArticle,
+        user_id: 2,
+      });
+
+      await expect(
+        service.remove(mockArticle.id, mockArticle.user_id),
+      ).rejects.toThrow(UnauthorizedException);
+
+      try {
+        await service.remove(mockArticle.id, mockArticle.user_id);
+      } catch (e) {
+        expect(e.message).toBe('You are not authorized to delete this article');
+      }
+    });
+
+    it('should return false if delete result has no affected rows', async () => {
+      jest.spyOn(articleRepository, 'findOne').mockResolvedValue(mockArticle);
+      jest
+        .spyOn(articleRepository, 'delete')
+        .mockResolvedValue({ affected: 0 } as any);
+
+      const result = await service.remove(mockArticle.id, mockArticle.user_id);
+      expect(result).toBe(false);
     });
   });
 });

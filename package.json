@@ -88,7 +88,8 @@
     ],
     "coveragePathIgnorePatterns": [
       "src/migration",
-      "src/main.ts"
+      "src/main.ts",
+      "src/config"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"

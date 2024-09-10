@@ -4,6 +4,7 @@ import { ArticleService } from './article.service';
 import { ArticleController } from './article.controller';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Article } from './entities/article.entity';
+import { DataSource } from 'typeorm';
 
 describe('ArticleModule', () => {
   let module: TestingModule;
@@ -16,6 +17,13 @@ describe('ArticleModule', () => {
       .useValue({
         find: jest.fn().mockResolvedValue([]),
         save: jest.fn().mockResolvedValue({}),
+      })
+      .overrideProvider(DataSource)
+      .useValue({
+        getRepository: jest.fn().mockReturnValue({
+          find: jest.fn().mockResolvedValue([]),
+          save: jest.fn().mockResolvedValue({}),
+        }),
       })
       .compile();
   });

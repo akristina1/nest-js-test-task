@@ -97,8 +97,12 @@ export class ArticleController {
   @ApiResponse({ status: 404, description: 'Article not found' })
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  update(@Param('id') id: string, @Body() updateArticleDto: UpdateArticleDto) {
-    return this.articleService.update(+id, updateArticleDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateArticleDto: UpdateArticleDto,
+    @Request() req: any,
+  ) {
+    return this.articleService.update(+id, updateArticleDto, req.userId);
   }
 
   @Delete(':id')
@@ -109,7 +113,7 @@ export class ArticleController {
   @ApiResponse({ status: 404, description: 'Article not found' })
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  remove(@Param('id') id: string) {
-    return this.articleService.remove(+id);
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.articleService.remove(+id, req.userId);
   }
 }

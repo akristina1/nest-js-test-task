@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as _ from 'lodash';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
@@ -103,8 +107,21 @@ export class ArticleService {
   async update(
     id: number,
     updateArticleDto: UpdateArticleDto,
+    user_id: number,
   ): Promise<Article> {
     const { title, description } = updateArticleDto;
+
+    const article = await this.articleRepository.findOne({ where: { id } });
+
+    if (!article) {
+      throw new BadRequestException('Article not found');
+    }
+
+    if (article.user_id !== user_id) {
+      throw new UnauthorizedException(
+        'You are not authorized to update this article',
+      );
+    }
 
     const updateData: UpdateArticleDto = {};
     if (title) updateData.title = title;
@@ -114,9 +131,23 @@ export class ArticleService {
       await this.articleRepository.update(id, updateData);
       return this.findOne(id);
     }
+
+    return article;
   }
 
-  async remove(id: number): Promise<DeleteResult> {
+  async remove(id: number, user_id: number): Promise<DeleteResult> {
+    const article = await this.articleRepository.findOne({ where: { id } });
+
+    if (!article) {
+      throw new BadRequestException('Article not found');
+    }
+
+    if (article.user_id !== user_id) {
+      throw new UnauthorizedException(
+        'You are not authorized to delete this article',
+      );
+    }
+
     return await this.articleRepository.delete(id);
   }
 }
