@@ -187,7 +187,7 @@ describe('ArticleController', () => {
 
       jest.spyOn(service, 'update').mockResolvedValue(result);
 
-      expect(await controller.update(id, updateArticleDto)).toEqual(result);
+      expect(await controller.update(id, updateArticleDto, 1)).toEqual(result);
       expect(service.update).toHaveBeenCalledWith(+id, updateArticleDto);
     });
 
@@ -200,7 +200,7 @@ describe('ArticleController', () => {
 
       jest.spyOn(service, 'update').mockResolvedValue(null);
 
-      await expect(controller.update(id, updateArticleDto)).rejects.toThrow(
+      await expect(controller.update(id, updateArticleDto, 1)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -213,7 +213,7 @@ describe('ArticleController', () => {
 
       jest.spyOn(service, 'remove').mockResolvedValue(result);
 
-      expect(await controller.remove(id)).toEqual(result);
+      expect(await controller.remove(id, 1)).toEqual(result);
       expect(service.remove).toHaveBeenCalledWith(+id);
     });
 
@@ -222,7 +222,7 @@ describe('ArticleController', () => {
 
       jest.spyOn(service, 'remove').mockResolvedValue({ affected: 0, raw: [] });
 
-      await expect(controller.remove(id)).rejects.toThrow(NotFoundException);
+      await expect(controller.remove(id, 1)).rejects.toThrow(NotFoundException);
     });
   });
 });
