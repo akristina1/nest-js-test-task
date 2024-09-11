@@ -6,6 +6,11 @@ import { AppService } from './app.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from './user/entities/user.entity';
 
+const mockRepository = {
+  find: jest.fn().mockResolvedValue([]),
+  save: jest.fn().mockResolvedValue({}),
+};
+
 describe('AppModule', () => {
   let appController: AppController;
   let appService: AppService;
@@ -16,14 +21,20 @@ describe('AppModule', () => {
     })
       .overrideProvider(ConfigService)
       .useValue({
-        get: jest.fn(() => ({})),
+        get: jest.fn((key: string) => {
+          if (key === 'typeorm') {
+            return {
+              type: 'sqlite',
+              database: ':memory:',
+              synchronize: true,
+              entities: [],
+            };
+          }
+          return null;
+        }),
       })
-
       .overrideProvider(getRepositoryToken(User))
-      .useValue({
-        find: jest.fn().mockResolvedValue([]),
-        save: jest.fn().mockResolvedValue({}),
-      })
+      .useValue(mockRepository)
       .compile();
 
     appController = module.get<AppController>(AppController);

@@ -4,6 +4,7 @@ import { ArticleService } from './article.service';
 import { ArticleController } from './article.controller';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Article } from './entities/article.entity';
+import { User } from '../user/entities/user.entity';
 import { DataSource } from 'typeorm';
 
 describe('ArticleModule', () => {
@@ -13,17 +14,32 @@ describe('ArticleModule', () => {
     module = await Test.createTestingModule({
       imports: [ArticleModule],
     })
+
       .overrideProvider(getRepositoryToken(Article))
       .useValue({
         find: jest.fn().mockResolvedValue([]),
         save: jest.fn().mockResolvedValue({}),
+        delete: jest.fn().mockResolvedValue({}),
+        findOne: jest.fn().mockResolvedValue(null),
       })
+
+      .overrideProvider(getRepositoryToken(User))
+      .useValue({
+        findOne: jest
+          .fn()
+          .mockResolvedValue({ id: 1, first_name: 'John', last_name: 'Doe' }),
+      })
+
       .overrideProvider(DataSource)
       .useValue({
         getRepository: jest.fn().mockReturnValue({
           find: jest.fn().mockResolvedValue([]),
           save: jest.fn().mockResolvedValue({}),
         }),
+        createQueryRunner: jest.fn().mockReturnThis(),
+        connect: jest.fn(),
+        query: jest.fn(),
+        transaction: jest.fn(),
       })
       .compile();
   });

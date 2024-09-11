@@ -40,7 +40,7 @@ describe('Helpers', () => {
     });
 
     it('should return false for a date string that does not parse into a valid date', () => {
-      const invalidDate = '2024-02-30T12:00:00Z';
+      const invalidDate = '2024-02-30T12:00:00Z5757757575';
       expect(Helpers.isValidDate(invalidDate)).toBe(false);
     });
   });

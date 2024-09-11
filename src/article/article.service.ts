@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as _ from 'lodash';
@@ -87,7 +88,7 @@ export class ArticleService {
   }
 
   async findOne(id: number): Promise<Article> {
-    return await this.articleRepository
+    const article = await this.articleRepository
       .createQueryBuilder('article')
       .leftJoinAndSelect('article.user', 'user')
       .select([
@@ -102,6 +103,12 @@ export class ArticleService {
       ])
       .where('article.id = :id', { id })
       .getOne();
+
+    if (!article) {
+      throw new NotFoundException(`Article with ID ${id} not found`);
+    }
+
+    return article;
   }
 
   async update(
@@ -135,7 +142,7 @@ export class ArticleService {
     return article;
   }
 
-  async remove(id: number, user_id: number): Promise<DeleteResult> {
+  async remove(id: number, user_id: number): Promise<boolean> {
     const article = await this.articleRepository.findOne({ where: { id } });
 
     if (!article) {
@@ -148,6 +155,7 @@ export class ArticleService {
       );
     }
 
-    return await this.articleRepository.delete(id);
+    const deleteResult: DeleteResult = await this.articleRepository.delete(id);
+    return deleteResult.affected > 0;
   }
 }

@@ -2,13 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ArticleController } from './article.controller';
 import { ArticleService } from './article.service';
 import { CreateArticleDto } from './dto/create-article.dto';
+import { JwtService } from '@nestjs/jwt';
 import { UpdateArticleDto } from './dto/update-article.dto';
 import { GetArticlesParamsDto } from './dto/get-articles-params.dto';
-import { NotFoundException } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { typeOrmTestConfig } from '../config/typeormTestConfig';
-import { Article } from './entities/article.entity';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { AuthGuard } from '../auth/auth.guard';
 
 describe('ArticleController', () => {
   let controller: ArticleController;
@@ -16,11 +18,6 @@ describe('ArticleController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [
-        AuthModule,
-        TypeOrmModule.forRoot(typeOrmTestConfig),
-        TypeOrmModule.forFeature([Article]),
-      ],
       controllers: [ArticleController],
       providers: [
         {
@@ -33,8 +30,18 @@ describe('ArticleController', () => {
             remove: jest.fn(),
           },
         },
+        {
+          provide: JwtService,
+          useValue: {
+            sign: jest.fn(() => 'token'),
+            verify: jest.fn(() => ({ userId: 1 })),
+          },
+        },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .compile();
 
     controller = module.get<ArticleController>(ArticleController);
     service = module.get<ArticleService>(ArticleService);
@@ -45,12 +52,13 @@ describe('ArticleController', () => {
   });
 
   describe('create', () => {
+    const userId = 1;
+
     it('should create a new article', async () => {
       const createArticleDto: CreateArticleDto = {
         title: 'Test',
         description: 'Test description',
       };
-      const userId = 1;
       const request = { userId };
       const result = {
         id: 1,
@@ -89,8 +97,8 @@ describe('ArticleController', () => {
         .mockRejectedValue(new Error('Validation failed'));
 
       await expect(
-        controller.create(invalidArticleDto, { userId: 1 }),
-      ).rejects.toThrow();
+        controller.create(invalidArticleDto, { userId }),
+      ).rejects.toThrow('Validation failed');
     });
   });
 
@@ -118,7 +126,9 @@ describe('ArticleController', () => {
         .spyOn(service, 'findAll')
         .mockRejectedValue(new Error('Invalid query parameters'));
 
-      await expect(controller.findAll(invalidQueryParams)).rejects.toThrow();
+      await expect(controller.findAll(invalidQueryParams)).rejects.toThrow(
+        'Invalid query parameters',
+      );
     });
   });
 
@@ -153,7 +163,9 @@ describe('ArticleController', () => {
     it('should throw a NotFoundException if article does not exist', async () => {
       const id = '1';
 
-      jest.spyOn(service, 'findOne').mockResolvedValue(null);
+      jest
+        .spyOn(service, 'findOne')
+        .mockRejectedValue(new NotFoundException('Article not found'));
 
       await expect(controller.findOne(id)).rejects.toThrow(NotFoundException);
     });
@@ -168,8 +180,8 @@ describe('ArticleController', () => {
       };
       const result = {
         id: 1,
-        title: 'Test',
-        description: 'Test description',
+        title: 'Updated Test',
+        description: 'Updated description',
         user_id: 1,
         created_at: new Date(),
         updated_at: new Date(),
@@ -187,8 +199,10 @@ describe('ArticleController', () => {
 
       jest.spyOn(service, 'update').mockResolvedValue(result);
 
-      expect(await controller.update(id, updateArticleDto, 1)).toEqual(result);
-      expect(service.update).toHaveBeenCalledWith(+id, updateArticleDto);
+      expect(
+        await controller.update(id, updateArticleDto, { userId: 1 }),
+      ).toEqual(result);
+      expect(service.update).toHaveBeenCalledWith(+id, updateArticleDto, 1);
     });
 
     it('should throw a NotFoundException if article to update is not found', async () => {
@@ -198,31 +212,65 @@ describe('ArticleController', () => {
         description: 'Updated description',
       };
 
-      jest.spyOn(service, 'update').mockResolvedValue(null);
+      jest
+        .spyOn(service, 'update')
+        .mockRejectedValue(new NotFoundException('Article not found'));
 
-      await expect(controller.update(id, updateArticleDto, 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        controller.update(id, updateArticleDto, { userId: 1 }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw an UnauthorizedException if user is not authorized to update the article', async () => {
+      const id = '1';
+      const updateArticleDto: UpdateArticleDto = {
+        title: 'Updated Test',
+        description: 'Updated description',
+      };
+
+      jest
+        .spyOn(service, 'update')
+        .mockRejectedValue(new UnauthorizedException('Unauthorized'));
+
+      await expect(
+        controller.update(id, updateArticleDto, { userId: 2 }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('remove', () => {
     it('should remove an article by id', async () => {
       const id = '1';
-      const result = { affected: 1, raw: [] };
+      const result = true;
 
       jest.spyOn(service, 'remove').mockResolvedValue(result);
 
-      expect(await controller.remove(id, 1)).toEqual(result);
-      expect(service.remove).toHaveBeenCalledWith(+id);
+      expect(await controller.remove(id, { userId: 1 })).toEqual(result);
+      expect(service.remove).toHaveBeenCalledWith(+id, 1);
     });
 
-    it('should throw a NotFoundException if article to delete is not found', async () => {
+    it('should throw a BadRequestException if article to delete is not found', async () => {
       const id = '1';
 
-      jest.spyOn(service, 'remove').mockResolvedValue({ affected: 0, raw: [] });
+      jest
+        .spyOn(service, 'remove')
+        .mockRejectedValue(new BadRequestException('Article not found'));
 
-      await expect(controller.remove(id, 1)).rejects.toThrow(NotFoundException);
+      await expect(controller.remove(id, { userId: 1 })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw an UnauthorizedException if user is not authorized to delete the article', async () => {
+      const id = '1';
+
+      jest
+        .spyOn(service, 'remove')
+        .mockRejectedValue(new UnauthorizedException('Unauthorized'));
+
+      await expect(controller.remove(id, { userId: 2 })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });
